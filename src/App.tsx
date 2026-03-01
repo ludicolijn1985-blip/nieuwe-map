@@ -1,0 +1,621 @@
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Rocket, Upload, Sparkles, Zap, Shield, Globe,
+  ChevronDown, Star, CheckCircle2, Bot, Download, Info,
+  FolderArchive, FileCode2, Layers, Maximize2, X, ArrowLeft, Sun, Moon
+} from 'lucide-react';
+import { BusinessFormData, LogEntry, ROIData, AppPhase } from './types';
+import { generateROI, generateLogSteps, generateFlutterCode, businessTypes } from './mockData';
+import { downloadFlutterProject } from './utils/generateFlutterZip';
+import ROICard from './components/ROICard';
+import PhonePreview from './components/PhonePreview';
+import LogPanel from './components/LogPanel';
+import CodeViewer from './components/CodeViewer';
+import TransparencyPanel from './components/TransparencyPanel';
+import LandingPage from './components/LandingPage';
+
+const defaultForm: BusinessFormData = {
+  name: '',
+  type: '',
+  city: '',
+  postcode: '',
+  description: '',
+  features: '',
+  primaryColor: '#22c55e',
+  secondaryColor: '#0a0a0f',
+  logoUploaded: false,
+};
+
+type Page = 'landing' | 'builder';
+
+export default function App() {
+  const [page, setPage] = useState<Page>('landing');
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('forgelocal-theme') as 'dark' | 'light') || 'dark';
+    }
+    return 'dark';
+  });
+
+  const [formData, setFormData] = useState<BusinessFormData>(defaultForm);
+  const [phase, setPhase] = useState<AppPhase>('input');
+  const [roi, setRoi] = useState<ROIData | null>(null);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [codeFiles, setCodeFiles] = useState<{ filename: string; code: string }[]>([]);
+  const [showTransparency, setShowTransparency] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [showFullPreview, setShowFullPreview] = useState(false);
+  const [toast, setToast] = useState('');
+  const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Apply theme to document
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('forgelocal-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(t => t === 'dark' ? 'light' : 'dark');
+  }, []);
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(''), 3000);
+  }, []);
+
+  const updateField = useCallback((field: keyof BusinessFormData, value: string | boolean) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  }, []);
+
+  const handleStart = useCallback(() => {
+    const r = generateROI(formData);
+    setRoi(r);
+    setPhase('roi');
+  }, [formData]);
+
+  const startBuilding = useCallback(() => {
+    setPhase('building');
+    const steps = generateLogSteps(formData);
+    const codes = generateFlutterCode(formData);
+    setCodeFiles(codes);
+
+    const initialLogs: LogEntry[] = steps.map(s => ({
+      ...s, status: 'pending' as const, timestamp: '', detail: s.detail,
+    }));
+    setLogs(initialLogs);
+    setCurrentStep(0);
+    setProgress(0);
+
+    let step = 0;
+    const runStep = () => {
+      if (step >= steps.length) {
+        setPhase('complete');
+        setProgress(100);
+        return;
+      }
+      const now = new Date();
+      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+      const startTime = Date.now();
+
+      setLogs(prev => prev.map((l, i) => ({
+        ...l,
+        status: i < step ? 'complete' as const : i === step ? 'running' as const : 'pending' as const,
+        timestamp: i === step ? timeStr : l.timestamp,
+      })));
+      setCurrentStep(step + 1);
+      setProgress(((step + 0.3) / steps.length) * 100);
+
+      const progressInterval = setInterval(() => {
+        setProgress(prev => {
+          const target = ((step + 0.9) / steps.length) * 100;
+          if (prev >= target) { clearInterval(progressInterval); return prev; }
+          return prev + 0.5;
+        });
+      }, 50);
+
+      const stepDuration = 1800 + Math.random() * 2200;
+      intervalRef.current = setTimeout(() => {
+        clearInterval(progressInterval);
+        const elapsed = Date.now() - startTime;
+        const durationStr = `${(elapsed / 1000).toFixed(1)}s`;
+
+        setLogs(prev => prev.map((l, i) => ({
+          ...l,
+          status: i <= step ? 'complete' as const : 'pending' as const,
+          duration: i === step ? durationStr : l.duration,
+        })));
+        setProgress(((step + 1) / steps.length) * 100);
+        step++;
+        intervalRef.current = setTimeout(runStep, 300 + Math.random() * 400);
+      }, stepDuration);
+    };
+
+    setTimeout(runStep, 600);
+  }, [formData]);
+
+  const handleDownload = useCallback(async () => {
+    setIsDownloading(true);
+    try {
+      await downloadFlutterProject(formData, codeFiles);
+      showToast('✅ Flutter project downloaded successfully!');
+    } catch (err) {
+      console.error('Download failed:', err);
+      showToast('❌ Download failed. Please try again.');
+    }
+    setTimeout(() => setIsDownloading(false), 1500);
+  }, [formData, codeFiles, showToast]);
+
+  const handleCopyFile = useCallback((code: string) => {
+    navigator.clipboard.writeText(code).catch(() => {});
+    showToast('📋 Code copied to clipboard!');
+  }, [showToast]);
+
+  useEffect(() => {
+    return () => { if (intervalRef.current) clearTimeout(intervalRef.current); };
+  }, []);
+
+  const isFormValid = formData.name && formData.type && formData.city;
+
+  // ===== LANDING PAGE =====
+  if (page === 'landing') {
+    return (
+      <LandingPage
+        onStartBuilder={() => { setPage('builder'); window.scrollTo(0, 0); }}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
+    );
+  }
+
+  // ===== BUILDER PAGE =====
+  return (
+    <div className="min-h-screen">
+      {/* Background effects */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="hero-orb-1 opacity-50" />
+        <div className="hero-orb-2 opacity-50" />
+      </div>
+
+      {/* Header */}
+      <header className="relative z-10 border-b border-soft">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button onClick={() => { setPage('landing'); setPhase('input'); }} className="flex items-center gap-2 cursor-pointer text-sub hover:text-hero transition-colors mr-2">
+              <ArrowLeft size={16} />
+            </button>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-green-500/20">
+              <Zap size={18} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-base font-bold tracking-tight text-hero">
+                ForgeLocal <span className="gradient-text">AI</span>
+              </h1>
+              <p className="text-[10px] text-dim -mt-0.5 hidden sm:block">Autonomous App Builder</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-1 text-[11px] text-dim">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              <span>AI Engine Active</span>
+            </div>
+            {(phase === 'building' || phase === 'complete') && (
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="hidden md:flex items-center gap-2 text-[11px] text-dim">
+                <span>Building:</span>
+                <span className="text-sub font-semibold">{formData.name}</span>
+              </motion.div>
+            )}
+            {(phase === 'building' || phase === 'complete') && (
+              <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} onClick={() => setShowFullPreview(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20 text-[11px] text-green-400 font-medium transition-all cursor-pointer hover:bg-green-500/20"
+              >
+                <Maximize2 size={12} />
+                <span className="hidden sm:inline">Test Preview</span>
+              </motion.button>
+            )}
+            <button onClick={() => setShowTransparency(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg card-surface text-[11px] text-dim hover:text-sub transition-all cursor-pointer">
+              <Info size={12} />
+              <span className="hidden sm:inline">Flutter FAQ</span>
+            </button>
+            <button onClick={toggleTheme} className="w-9 h-9 rounded-xl card-surface flex items-center justify-center cursor-pointer hover:scale-105 transition-transform">
+              {theme === 'dark' ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} className="text-indigo-500" />}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main content */}
+      <main className="relative z-10">
+        <AnimatePresence mode="wait">
+          {phase === 'input' ? (
+            <InputPhase key="input" formData={formData} updateField={updateField} onStart={handleStart} isValid={!!isFormValid} />
+          ) : (
+            <BuildPhase key="build" formData={formData} logs={logs} currentStep={currentStep} progress={progress}
+              codeFiles={codeFiles} phase={phase} onOpenPreview={() => setShowFullPreview(true)} onCopyFile={handleCopyFile} />
+          )}
+        </AnimatePresence>
+      </main>
+
+      {/* ROI Modal */}
+      <AnimatePresence>
+        {phase === 'roi' && roi && <ROICard roi={roi} onContinue={startBuilding} />}
+      </AnimatePresence>
+
+      {/* Transparency Panel */}
+      <AnimatePresence>
+        {showTransparency && <TransparencyPanel onClose={() => setShowTransparency(false)} />}
+      </AnimatePresence>
+
+      {/* Full Preview Overlay */}
+      <AnimatePresence>
+        {showFullPreview && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4"
+          >
+            <motion.div initial={{ opacity: 0, scale: 0.85, y: 30 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              transition={{ type: 'spring', stiffness: 200, damping: 25 }} className="relative flex flex-col items-center gap-6 max-w-lg"
+            >
+              <button onClick={() => setShowFullPreview(false)} className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition-all z-10 cursor-pointer">
+                <X size={16} />
+              </button>
+              <div className="text-center">
+                <div className="flex items-center gap-2 justify-center mb-2">
+                  <span className="text-[11px] font-bold text-green-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <Zap size={12} /> Interactive Preview
+                  </span>
+                </div>
+                <p className="text-white/40 text-xs">Tap around to test your app • Navigate between screens</p>
+              </div>
+              <div className="transform scale-[1.2] sm:scale-[1.35] origin-center">
+                <PhonePreview data={formData} currentStep={currentStep} isBuilding={phase === 'building' || phase === 'complete'} interactive={true} />
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-3 mt-2">
+                {['👆 Tap nav to switch', '➕ Add to cart', '🎁 Claim rewards', '📍 View map'].map(hint => (
+                  <span key={hint} className="text-[10px] text-white/25 bg-white/5 px-2.5 py-1 rounded-full">{hint}</span>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Complete bar */}
+      <AnimatePresence>
+        {phase === 'complete' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed bottom-0 left-0 right-0 z-50">
+            <div className="h-20 bg-gradient-to-t from-[var(--bg)] to-transparent pointer-events-none" style={{ '--bg': theme === 'dark' ? '#0a0a0f' : '#f8f9fc' } as React.CSSProperties} />
+            <div className="nav-bg">
+              <motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5, type: 'spring', stiffness: 200, damping: 20 }}
+                className="max-w-[1600px] mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-4"
+              >
+                <div className="flex items-center gap-4">
+                  <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ duration: 2, repeat: Infinity }}>
+                    <CheckCircle2 size={28} className="text-green-400" />
+                  </motion.div>
+                  <div>
+                    <p className="text-hero font-bold text-sm flex items-center gap-2">🎉 App successfully generated!</p>
+                    <p className="text-dim text-xs">Complete Flutter project with {codeFiles.length + 6} files ready</p>
+                  </div>
+                </div>
+                <div className="hidden lg:flex items-center gap-6">
+                  <div className="flex items-center gap-2 text-dim"><FileCode2 size={14} className="text-purple-400" /><span className="text-xs">{codeFiles.length} Dart files</span></div>
+                  <div className="flex items-center gap-2 text-dim"><Layers size={14} className="text-cyan-400" /><span className="text-xs">Riverpod + Firebase</span></div>
+                  <div className="flex items-center gap-2 text-dim"><FolderArchive size={14} className="text-amber-400" /><span className="text-xs">Full project</span></div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => setShowFullPreview(true)}
+                    className="px-5 py-3 rounded-xl card-surface text-hero text-sm font-semibold transition-all flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <Maximize2 size={16} className="text-green-400" /> Test Preview
+                  </motion.button>
+                  <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={handleDownload} disabled={isDownloading}
+                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white text-sm font-bold hover:shadow-lg hover:shadow-green-500/25 transition-all flex items-center gap-2.5 cursor-pointer disabled:opacity-60 relative overflow-hidden group"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-700" />
+                    {isDownloading ? (
+                      <span className="relative flex items-center gap-2">
+                        <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}><Sparkles size={16} /></motion.div>
+                        Generating ZIP...
+                      </span>
+                    ) : (
+                      <span className="relative flex items-center gap-2"><Download size={16} /> Download .zip</span>
+                    )}
+                  </motion.button>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Toast */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div initial={{ opacity: 0, y: 50, x: '-50%' }} animate={{ opacity: 1, y: 0, x: '-50%' }} exit={{ opacity: 0, y: 50, x: '-50%' }}
+            className="fixed bottom-6 left-1/2 z-[70] px-6 py-3 rounded-2xl bg-green-500 text-white font-semibold text-sm shadow-2xl shadow-green-500/30 flex items-center gap-2"
+          >
+            {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ============================================
+// INPUT PHASE
+// ============================================
+interface InputPhaseProps {
+  formData: BusinessFormData;
+  updateField: (field: keyof BusinessFormData, value: string | boolean) => void;
+  onStart: () => void;
+  isValid: boolean;
+}
+
+const InputPhase: React.FC<InputPhaseProps> = ({ formData, updateField, onStart, isValid }) => (
+  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="max-w-[1600px] mx-auto px-4 sm:px-6 py-8 sm:py-12">
+    {/* Hero */}
+    <div className="text-center mb-10 sm:mb-14">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-500/10 border border-green-500/20 text-green-500 text-xs font-medium mb-6"
+      >
+        <Bot size={14} /> Powered by Autonomous AI Agents
+      </motion.div>
+      <motion.h2 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+        className="text-3xl sm:text-5xl lg:text-6xl font-black text-hero leading-tight mb-4"
+      >
+        Build your local business app<br /><span className="gradient-text">in minutes, not months</span>
+      </motion.h2>
+      <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+        className="text-base sm:text-lg text-sub max-w-2xl mx-auto"
+      >
+        Our AI agent analyses your business, designs a custom Flutter app, and generates production-ready code — completely autonomously.
+      </motion.p>
+    </div>
+
+    <div className="grid lg:grid-cols-[1fr_380px] gap-8 max-w-5xl mx-auto">
+      {/* Form */}
+      <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }} className="glass-card rounded-2xl p-6 sm:p-8">
+        <div className="flex items-center gap-2 mb-6">
+          <Sparkles size={16} className="text-green-400" />
+          <h3 className="text-base font-bold text-hero">Tell us about your business</h3>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs font-medium text-sub uppercase tracking-wider mb-1.5 block">Business Name *</label>
+            <input type="text" value={formData.name} onChange={(e) => updateField('name', e.target.value)} placeholder="e.g. Café De Hoek"
+              className="w-full px-4 py-3 rounded-xl input-field focus:outline-none transition-all text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-sub uppercase tracking-wider mb-1.5 block">Business Type *</label>
+            <div className="relative">
+              <select value={formData.type} onChange={(e) => updateField('type', e.target.value)}
+                className="w-full px-4 py-3 rounded-xl input-field focus:outline-none transition-all text-sm appearance-none cursor-pointer"
+              >
+                <option value="">Select your business type...</option>
+                {businessTypes.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-dim pointer-events-none" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-sub uppercase tracking-wider mb-1.5 block">City *</label>
+              <input type="text" value={formData.city} onChange={(e) => updateField('city', e.target.value)} placeholder="e.g. Amsterdam"
+                className="w-full px-4 py-3 rounded-xl input-field focus:outline-none transition-all text-sm" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-sub uppercase tracking-wider mb-1.5 block">Postcode</label>
+              <input type="text" value={formData.postcode} onChange={(e) => updateField('postcode', e.target.value)} placeholder="e.g. 1012 AB"
+                className="w-full px-4 py-3 rounded-xl input-field focus:outline-none transition-all text-sm" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-sub uppercase tracking-wider mb-1.5 block">Short Description</label>
+            <input type="text" value={formData.description} onChange={(e) => updateField('description', e.target.value)} placeholder="e.g. Cozy neighborhood café with artisan coffee"
+              className="w-full px-4 py-3 rounded-xl input-field focus:outline-none transition-all text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-sub uppercase tracking-wider mb-1.5 block">Key Features Wanted</label>
+            <textarea value={formData.features} onChange={(e) => updateField('features', e.target.value)}
+              placeholder={'Online menu\nTable reservations\nLoyalty rewards\nPush notifications'} rows={4}
+              className="w-full px-4 py-3 rounded-xl input-field focus:outline-none transition-all text-sm resize-none" />
+            <p className="text-[10px] text-dim mt-1">One feature per line</p>
+          </div>
+          <div className="grid grid-cols-[1fr_1fr_auto] gap-3 items-end">
+            <div>
+              <label className="text-xs font-medium text-sub uppercase tracking-wider mb-1.5 block">Primary Color</label>
+              <div className="flex items-center gap-2">
+                <input type="color" value={formData.primaryColor} onChange={(e) => updateField('primaryColor', e.target.value)} className="rounded-lg cursor-pointer" />
+                <span className="text-xs font-mono text-dim">{formData.primaryColor}</span>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-sub uppercase tracking-wider mb-1.5 block">Secondary Color</label>
+              <div className="flex items-center gap-2">
+                <input type="color" value={formData.secondaryColor} onChange={(e) => updateField('secondaryColor', e.target.value)} className="rounded-lg cursor-pointer" />
+                <span className="text-xs font-mono text-dim">{formData.secondaryColor}</span>
+              </div>
+            </div>
+            <div>
+              <button onClick={() => updateField('logoUploaded', !formData.logoUploaded)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                  formData.logoUploaded ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'card-surface text-sub'
+                }`}
+              >
+                <Upload size={14} />
+                {formData.logoUploaded ? 'Logo ✓' : 'Upload Logo'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <motion.button whileHover={{ scale: isValid ? 1.01 : 1 }} whileTap={{ scale: isValid ? 0.98 : 1 }}
+          onClick={isValid ? onStart : undefined} disabled={!isValid}
+          className={`w-full mt-8 py-4 rounded-xl text-white font-bold text-base flex items-center justify-center gap-3 transition-all ${
+            isValid ? 'bg-gradient-to-r from-green-500 to-emerald-600 shadow-lg shadow-green-500/25 hover:shadow-green-500/40 cursor-pointer pulse-glow' : 'bg-white/10 text-white/30 cursor-not-allowed'
+          }`}
+        >
+          <Rocket size={20} /> 🚀 Start Autonomous Agent
+        </motion.button>
+        {!isValid && <p className="text-center text-dim text-xs mt-2">Fill in the required fields to continue</p>}
+      </motion.div>
+
+      {/* Side info */}
+      <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }} className="space-y-4">
+        <div className="glass-card rounded-2xl p-5">
+          <h4 className="text-xs font-semibold text-sub uppercase tracking-wider mb-4">Platform Stats</h4>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { value: '2,847', label: 'Apps Built' },
+              { value: '€4.2M', label: 'Revenue Generated' },
+              { value: '98.5%', label: 'Satisfaction' },
+              { value: '3.2 min', label: 'Avg Build Time' },
+            ].map(stat => (
+              <div key={stat.label} className="text-center py-2">
+                <p className="text-lg font-bold text-hero">{stat.value}</p>
+                <p className="text-[10px] text-dim">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="glass-card rounded-2xl p-5">
+          <h4 className="text-xs font-semibold text-sub uppercase tracking-wider mb-4">What You Get</h4>
+          <div className="space-y-3">
+            {[
+              { icon: <Globe size={14} />, text: 'Custom Flutter app (iOS + Android)', color: 'text-cyan-400' },
+              { icon: <Shield size={14} />, text: 'Production-ready source code', color: 'text-purple-400' },
+              { icon: <Star size={14} />, text: 'Loyalty & rewards system', color: 'text-amber-400' },
+              { icon: <Zap size={14} />, text: 'Push notifications built-in', color: 'text-green-400' },
+              { icon: <Download size={14} />, text: 'One-click ZIP download', color: 'text-pink-400' },
+            ].map(item => (
+              <div key={item.text} className="flex items-center gap-3">
+                <span className={item.color}>{item.icon}</span>
+                <span className="text-xs text-body">{item.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="glass-card rounded-2xl p-5">
+          <div className="flex items-center gap-1 mb-3">
+            {[1,2,3,4,5].map(i => <Star key={i} size={12} fill="#fbbf24" stroke="#fbbf24" />)}
+          </div>
+          <p className="text-xs text-sub italic leading-relaxed">
+            &quot;Within 4 minutes we had a fully working app for our restaurant. Our reservations increased by 40% in the first month.&quot;
+          </p>
+          <div className="flex items-center gap-2 mt-3">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-[10px] font-bold text-white">M</div>
+            <div>
+              <p className="text-[11px] text-hero font-medium">Marco de Jong</p>
+              <p className="text-[9px] text-dim">Owner, Ristorante Marco — Amsterdam</p>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  </motion.div>
+);
+
+// ============================================
+// BUILD PHASE
+// ============================================
+interface BuildPhaseProps {
+  formData: BusinessFormData;
+  logs: LogEntry[];
+  currentStep: number;
+  progress: number;
+  codeFiles: { filename: string; code: string }[];
+  phase: AppPhase;
+  onOpenPreview: () => void;
+  onCopyFile: (code: string) => void;
+}
+
+const BuildPhase: React.FC<BuildPhaseProps> = ({ formData, logs, currentStep, progress, codeFiles, phase, onOpenPreview, onCopyFile }) => (
+  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-[1600px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
+    {/* Top bar */}
+    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+      className="flex flex-wrap items-center justify-between gap-3 mb-5"
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 text-xs">
+          <div className={`w-2 h-2 rounded-full ${phase === 'complete' ? 'bg-green-400' : 'bg-green-400 animate-pulse'}`} />
+          <span className="text-sub font-medium">{phase === 'complete' ? '✓ Build Complete' : '⚡ Building'}</span>
+          <span className="text-dim">|</span>
+          <span className="text-hero font-semibold">{formData.name}</span>
+          <span className="text-dim">•</span>
+          <span className="text-sub">{formData.type}</span>
+          <span className="text-dim">•</span>
+          <span className="text-sub">{formData.city}</span>
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-dim font-mono">{Math.round(progress)}%</span>
+        {phase === 'complete' && (
+          <motion.span initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: 'spring', stiffness: 200 }}
+            className="text-xs text-green-400 bg-green-400/10 px-3 py-1 rounded-full font-medium border border-green-400/20 flex items-center gap-1"
+          >
+            <CheckCircle2 size={12} /> Complete
+          </motion.span>
+        )}
+      </div>
+    </motion.div>
+
+    {/* Progress bar */}
+    <motion.div initial={{ opacity: 0, scaleX: 0 }} animate={{ opacity: 1, scaleX: 1 }} transition={{ delay: 0.1 }}
+      className="h-1 bg-white/5 rounded-full mb-6 overflow-hidden" style={{ transformOrigin: 'left' }}
+    >
+      <motion.div className="h-full rounded-full progress-bar-animated" initial={{ width: 0 }} animate={{ width: `${progress}%` }} transition={{ duration: 0.5, ease: 'easeOut' }} />
+    </motion.div>
+
+    {/* Three columns */}
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-4 lg:gap-5" style={{ minHeight: 'calc(100vh - 200px)' }}>
+      {/* Log */}
+      <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}
+        className="glass-card rounded-2xl p-4 sm:p-5 order-2 lg:order-1 max-h-[650px] overflow-hidden flex flex-col"
+      >
+        <LogPanel logs={logs} progress={progress} />
+      </motion.div>
+
+      {/* Phone */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
+        className="flex flex-col items-center justify-start py-2 order-1 lg:order-2"
+      >
+        <div className="sticky top-4">
+          <PhonePreview data={formData} currentStep={currentStep} isBuilding={phase === 'building' || phase === 'complete'} interactive={phase === 'complete'} />
+          <div className="text-center mt-4">
+            <p className="text-[10px] text-dim uppercase tracking-widest font-medium">Live Preview</p>
+            <p className="text-[10px] text-dim mt-0.5">Android • Flutter • {formData.type}</p>
+            {phase === 'building' && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center justify-center gap-1 mt-2">
+                <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 1.5, repeat: Infinity }} className="w-1 h-1 rounded-full bg-green-400/40" />
+                <span className="text-[9px] text-dim">Rendering screen {Math.min(currentStep, 5)}/5</span>
+              </motion.div>
+            )}
+            {phase === 'complete' && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-3">
+                <button onClick={onOpenPreview} className="text-[11px] font-medium px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 mx-auto cursor-pointer"
+                  style={{ color: formData.primaryColor, background: `${formData.primaryColor}15`, border: `1px solid ${formData.primaryColor}25` }}
+                >
+                  <Maximize2 size={12} /> Open Full Interactive Preview
+                </button>
+              </motion.div>
+            )}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Code */}
+      <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }}
+        className="glass-card rounded-2xl p-4 sm:p-5 order-3 max-h-[650px] overflow-hidden flex flex-col"
+      >
+        <CodeViewer files={codeFiles} currentStep={currentStep} onCopyFile={onCopyFile} />
+      </motion.div>
+    </div>
+  </motion.div>
+);
