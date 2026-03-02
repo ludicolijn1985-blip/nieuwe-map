@@ -61,7 +61,7 @@ export function generateROI(data: BusinessFormData): ROIData {
     buildTimeMin: buildMin,
     buildTimeMax: buildMax,
     complexity: info.complexity,
-    monthlyPrice: 29,
+    monthlyPrice: 49,
     paybackWeeks: 3,
   };
 }

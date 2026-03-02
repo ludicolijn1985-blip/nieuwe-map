@@ -4,22 +4,26 @@ import {
   Rocket, Upload, Sparkles, Zap, Shield, Globe,
   Star, CheckCircle2, Bot, Download,
   FolderArchive, FileCode2, Layers, Maximize2, X, ArrowLeft, Sun, Moon,
-  User, LogOut, LayoutDashboard, CreditCard
+  User, LogOut, LayoutDashboard, CreditCard, LayoutGrid, Cookie, Key
 } from 'lucide-react';
 import { BusinessFormData, LogEntry, ROIData, AppPhase, UserProfile, SavedApp, SaaSPage } from './types';
 import { generateROI, generateLogSteps, generateFlutterCode } from './mockData';
 import { downloadFlutterProject } from './utils/generateFlutterZip';
 import { saveApp, getCurrentUser, signOut } from './lib/supabase';
+import { generateWithAI, AIProvider } from './lib/aiAgent';
 import ROICard from './components/ROICard';
 import PhonePreview from './components/PhonePreview';
+import DevicePreview from './components/DevicePreview';
 import LogPanel from './components/LogPanel';
 import CodeViewer from './components/CodeViewer';
 import LandingPage from './components/LandingPage';
 import BusinessTypeDropdown from './components/BusinessTypeDropdown';
 import AuthModal from './components/AuthModal';
+import APIKeySettings from './components/APIKeySettings';
 import Dashboard from './components/Dashboard';
 import PlayStoreAssets from './components/PlayStoreAssets';
 import MaintenanceAgent from './components/MaintenanceAgent';
+import TemplateGallery from './components/TemplateGallery';
 
 const defaultForm: BusinessFormData = {
   name: '', type: '', city: '', postcode: '', description: '',
@@ -54,11 +58,47 @@ export default function App() {
 
   // SaaS features
   const [selectedApp, setSelectedApp] = useState<SavedApp | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [showCookieBanner, setShowCookieBanner] = useState(() => {
+    return !localStorage.getItem('forgelocal-cookies-accepted');
+  });
+
+  // AI Settings
+  const [showApiSettings, setShowApiSettings] = useState(false);
+  const [aiConfig, setAiConfig] = useState<{ provider: AIProvider; apiKey: string; model?: string } | null>(() => {
+    // Load saved AI config from localStorage on mount
+    const savedProvider = localStorage.getItem('forgelocal-ai-provider') as AIProvider | null;
+    const savedKey = savedProvider ? localStorage.getItem(`forgelocal-apikey-${savedProvider}`) : null;
+    const savedModel = savedProvider ? localStorage.getItem(`forgelocal-model-${savedProvider}`) : null;
+    if (savedProvider && savedKey) {
+      return { provider: savedProvider, apiKey: savedKey, model: savedModel || undefined };
+    }
+    return null;
+  });
 
   // Load user on mount
   useEffect(() => {
     getCurrentUser().then(u => { if (u) setUser(u); });
   }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (phase === 'input' && formData.name && formData.type && formData.city) {
+          handleStart();
+        }
+      }
+      if (e.key === 'Escape') {
+        if (showFullPreview) setShowFullPreview(false);
+        if (showTemplates) setShowTemplates(false);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [phase, formData, showFullPreview, showTemplates]);
 
   // Apply theme
   useEffect(() => {
@@ -86,6 +126,9 @@ export default function App() {
     setPhase('building');
     const steps = generateLogSteps(formData);
     const codes = generateFlutterCode(formData);
+    const useAI = !!(aiConfig && aiConfig.apiKey);
+    const aiGeneratedFiles: { filename: string; code: string }[] = [];
+
     setCodeFiles(codes);
     setLogs(steps.map(s => ({ ...s, status: 'pending' as const, timestamp: '', detail: s.detail })));
     setCurrentStep(0);
@@ -94,12 +137,22 @@ export default function App() {
     let step = 0;
     const runStep = () => {
       if (step >= steps.length) {
+        // If AI was used, merge AI-generated files with mock files
+        if (useAI && aiGeneratedFiles.length > 0) {
+          setCodeFiles(prev => {
+            const aiFilenames = new Set(aiGeneratedFiles.map(f => f.filename));
+            const filtered = prev.filter(f => !aiFilenames.has(f.filename));
+            return [...aiGeneratedFiles, ...filtered];
+          });
+        }
         setPhase('complete');
         setProgress(100);
-        // Auto-save app
+        setShowConfetti(true);
+        setTimeout(() => setShowConfetti(false), 4000);
         if (roi) {
-          saveApp(formData, codes, roi).then(() => {
-            showToastMsg('💾 App saved to your dashboard!');
+          const finalCodes = useAI && aiGeneratedFiles.length > 0 ? aiGeneratedFiles : codes;
+          saveApp(formData, finalCodes, roi).then(() => {
+            showToastMsg(useAI ? '🎉 App generated with real AI & saved!' : '🎉 App generated & saved!');
           });
         }
         return;
@@ -112,6 +165,7 @@ export default function App() {
         ...l,
         status: i < step ? 'complete' as const : i === step ? 'running' as const : 'pending' as const,
         timestamp: i === step ? timeStr : l.timestamp,
+        detail: i === step && useAI ? `${l.detail} (🤖 AI: ${aiConfig!.provider})` : l.detail,
       })));
       setCurrentStep(step + 1);
       setProgress(((step + 0.3) / steps.length) * 100);
@@ -124,10 +178,11 @@ export default function App() {
         });
       }, 50);
 
-      const stepDuration = 1800 + Math.random() * 2200;
-      intervalRef.current = setTimeout(() => {
+      // For code generation steps (1-5), use real AI if available
+      const isCodeStep = step >= 0 && step <= 4 && useAI;
+
+      const handleStepComplete = (elapsed: number) => {
         clearInterval(progressInterval);
-        const elapsed = Date.now() - startTime;
         const durationStr = `${(elapsed / 1000).toFixed(1)}s`;
         setLogs(prev => prev.map((l, i) => ({
           ...l,
@@ -137,11 +192,39 @@ export default function App() {
         setProgress(((step + 1) / steps.length) * 100);
         step++;
         intervalRef.current = setTimeout(runStep, 300 + Math.random() * 400);
-      }, stepDuration);
+      };
+
+      if (isCodeStep) {
+        // Real AI generation
+        generateWithAI(aiConfig, formData, step + 1)
+          .then((result) => {
+            aiGeneratedFiles.push({ filename: result.filename, code: result.code });
+            // Update code files in real-time
+            setCodeFiles(prev => {
+              const exists = prev.findIndex(f => f.filename === result.filename);
+              if (exists >= 0) {
+                const updated = [...prev];
+                updated[exists] = { filename: result.filename, code: result.code };
+                return updated;
+              }
+              return [...prev, { filename: result.filename, code: result.code }];
+            });
+            handleStepComplete(Date.now() - startTime);
+          })
+          .catch(() => {
+            // Fallback to mock on error
+            handleStepComplete(Date.now() - startTime);
+          });
+      } else {
+        const stepDuration = 1800 + Math.random() * 2200;
+        intervalRef.current = setTimeout(() => {
+          handleStepComplete(Date.now() - startTime);
+        }, stepDuration);
+      }
     };
 
     setTimeout(runStep, 600);
-  }, [formData, roi, showToastMsg]);
+  }, [formData, roi, aiConfig, showToastMsg]);
 
   const handleDownload = useCallback(async () => {
     setIsDownloading(true);
@@ -162,6 +245,27 @@ export default function App() {
     setShowAuth(false);
     showToastMsg(`👋 Welcome, ${u.name || u.email}!`);
   }, [showToastMsg]);
+
+  const handleTemplateSelect = useCallback((templateData: Partial<BusinessFormData>) => {
+    setFormData(prev => ({ ...prev, ...templateData }));
+    showToastMsg('✨ Template applied!');
+  }, [showToastMsg]);
+
+  const handleSaveAiConfig = useCallback((provider: AIProvider, apiKey: string, model?: string) => {
+    if (apiKey) {
+      localStorage.setItem('forgelocal-ai-provider', provider);
+      setAiConfig({ provider, apiKey, model });
+      showToastMsg(`🔑 ${provider === 'groq' ? 'Groq' : provider} API key saved!`);
+    } else {
+      localStorage.removeItem('forgelocal-ai-provider');
+      setAiConfig(null);
+    }
+  }, [showToastMsg]);
+
+  const acceptCookies = useCallback(() => {
+    localStorage.setItem('forgelocal-cookies-accepted', 'true');
+    setShowCookieBanner(false);
+  }, []);
 
   const handleSignOut = useCallback(async () => {
     await signOut();
@@ -206,6 +310,10 @@ export default function App() {
       <>
         <LandingPage onStartBuilder={goToBuilder} theme={theme} onToggleTheme={toggleTheme} />
         <AnimatePresence>{showAuth && <AuthModal onClose={() => setShowAuth(false)} onAuth={handleAuth} />}</AnimatePresence>
+        <AnimatePresence>{showApiSettings && (
+          <APIKeySettings onClose={() => setShowApiSettings(false)} onSave={handleSaveAiConfig}
+            currentProvider={aiConfig?.provider} currentKey={aiConfig?.apiKey} currentModel={aiConfig?.model} showToast={showToastMsg} />
+        )}</AnimatePresence>
         <ToastDisplay toast={toast} />
       </>
     );
@@ -215,7 +323,7 @@ export default function App() {
     return (
       <div className="min-h-screen">
         <div className="fixed inset-0 overflow-hidden pointer-events-none"><div className="hero-orb-1 opacity-30" /><div className="hero-orb-2 opacity-30" /></div>
-        <AppHeader theme={theme} toggleTheme={toggleTheme} user={user} onSignOut={handleSignOut} onDashboard={() => setPage('dashboard')} onBack={() => setPage('landing')} onLogin={() => setShowAuth(true)} />
+        <AppHeader theme={theme} toggleTheme={toggleTheme} user={user} onSignOut={handleSignOut} onDashboard={() => setPage('dashboard')} onBack={() => setPage('landing')} onLogin={() => setShowAuth(true)} onPricing={() => { setPage('landing'); setTimeout(() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' }), 100); }} onApiSettings={() => setShowApiSettings(true)} hasApiKey={!!(aiConfig && aiConfig.apiKey)} />
         <main className="relative z-10">
           <Dashboard user={user} onNewApp={goToBuilder}
             onOpenApp={openAppInBuilder}
@@ -224,6 +332,10 @@ export default function App() {
             showToast={showToastMsg}
           />
         </main>
+        <AnimatePresence>{showApiSettings && (
+          <APIKeySettings onClose={() => setShowApiSettings(false)} onSave={handleSaveAiConfig}
+            currentProvider={aiConfig?.provider} currentKey={aiConfig?.apiKey} currentModel={aiConfig?.model} showToast={showToastMsg} />
+        )}</AnimatePresence>
         <ToastDisplay toast={toast} />
       </div>
     );
@@ -233,7 +345,7 @@ export default function App() {
     return (
       <div className="min-h-screen">
         <div className="fixed inset-0 overflow-hidden pointer-events-none"><div className="hero-orb-1 opacity-30" /><div className="hero-orb-2 opacity-30" /></div>
-        <AppHeader theme={theme} toggleTheme={toggleTheme} user={user} onSignOut={handleSignOut} onDashboard={() => setPage('dashboard')} onBack={() => setPage('dashboard')} onLogin={() => setShowAuth(true)} />
+        <AppHeader theme={theme} toggleTheme={toggleTheme} user={user} onSignOut={handleSignOut} onDashboard={() => setPage('dashboard')} onBack={() => setPage('dashboard')} onLogin={() => setShowAuth(true)} onPricing={() => { setPage('landing'); setTimeout(() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' }), 100); }} onApiSettings={() => setShowApiSettings(true)} hasApiKey={!!(aiConfig && aiConfig.apiKey)} />
         <main className="relative z-10">
           <PlayStoreAssets app={selectedApp} onBack={() => setPage('dashboard')} showToast={showToastMsg} />
         </main>
@@ -246,7 +358,7 @@ export default function App() {
     return (
       <div className="min-h-screen">
         <div className="fixed inset-0 overflow-hidden pointer-events-none"><div className="hero-orb-1 opacity-30" /><div className="hero-orb-2 opacity-30" /></div>
-        <AppHeader theme={theme} toggleTheme={toggleTheme} user={user} onSignOut={handleSignOut} onDashboard={() => setPage('dashboard')} onBack={() => setPage('dashboard')} onLogin={() => setShowAuth(true)} />
+        <AppHeader theme={theme} toggleTheme={toggleTheme} user={user} onSignOut={handleSignOut} onDashboard={() => setPage('dashboard')} onBack={() => setPage('dashboard')} onLogin={() => setShowAuth(true)} onPricing={() => { setPage('landing'); setTimeout(() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' }), 100); }} onApiSettings={() => setShowApiSettings(true)} hasApiKey={!!(aiConfig && aiConfig.apiKey)} />
         <main className="relative z-10">
           <MaintenanceAgent app={selectedApp} onBack={() => setPage('dashboard')} showToast={showToastMsg} />
         </main>
@@ -263,6 +375,9 @@ export default function App() {
       {/* Header */}
       <AppHeader theme={theme} toggleTheme={toggleTheme} user={user} onSignOut={handleSignOut}
         onDashboard={() => setPage('dashboard')} onBack={() => { setPage(user ? 'dashboard' : 'landing'); setPhase('input'); }} onLogin={() => setShowAuth(true)}
+        onPricing={() => { setPage('landing'); setTimeout(() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' }), 100); }}
+        onApiSettings={() => setShowApiSettings(true)}
+        hasApiKey={!!(aiConfig && aiConfig.apiKey)}
         extra={
           <>
             {(phase === 'building' || phase === 'complete') && (
@@ -285,7 +400,7 @@ export default function App() {
       <main className="relative z-10">
         <AnimatePresence mode="wait">
           {phase === 'input' ? (
-            <InputPhase key="input" formData={formData} updateField={updateField} onStart={handleStart} isValid={!!isFormValid} />
+            <InputPhase key="input" formData={formData} updateField={updateField} onStart={handleStart} isValid={!!isFormValid} onOpenTemplates={() => setShowTemplates(true)} onOpenAiSettings={() => setShowApiSettings(true)} hasApiKey={!!(aiConfig && aiConfig.apiKey)} aiProvider={aiConfig?.provider} />
           ) : (
             <BuildPhase key="build" formData={formData} logs={logs} currentStep={currentStep} progress={progress}
               codeFiles={codeFiles} phase={phase} onOpenPreview={() => setShowFullPreview(true)} onCopyFile={handleCopyFile} />
@@ -298,6 +413,62 @@ export default function App() {
         {phase === 'roi' && roi && <ROICard roi={roi} onContinue={startBuilding} />}
       </AnimatePresence>
       <AnimatePresence>{showAuth && <AuthModal onClose={() => setShowAuth(false)} onAuth={handleAuth} />}</AnimatePresence>
+      <AnimatePresence>{showTemplates && <TemplateGallery onSelectTemplate={handleTemplateSelect} onClose={() => setShowTemplates(false)} />}</AnimatePresence>
+      <AnimatePresence>{showApiSettings && (
+        <APIKeySettings
+          onClose={() => setShowApiSettings(false)}
+          onSave={handleSaveAiConfig}
+          currentProvider={aiConfig?.provider}
+          currentKey={aiConfig?.apiKey}
+          currentModel={aiConfig?.model}
+          showToast={showToastMsg}
+        />
+      )}</AnimatePresence>
+
+      {/* Confetti */}
+      {showConfetti && (
+        <div className="fixed inset-0 pointer-events-none z-[80]">
+          {Array.from({ length: 50 }).map((_, i) => (
+            <div
+              key={i}
+              className="confetti-piece"
+              style={{
+                left: `${Math.random() * 100}%`,
+                backgroundColor: ['#22c55e', '#3b82f6', '#f59e0b', '#ec4899', '#a855f7', '#06b6d4'][i % 6],
+                animationDelay: `${Math.random() * 2}s`,
+                animationDuration: `${2 + Math.random() * 2}s`,
+                borderRadius: Math.random() > 0.5 ? '50%' : '2px',
+                width: `${6 + Math.random() * 8}px`,
+                height: `${6 + Math.random() * 8}px`,
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Cookie Banner */}
+      <AnimatePresence>
+        {showCookieBanner && (
+          <motion.div
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-md z-[65] glass-card rounded-2xl p-5 shadow-2xl"
+          >
+            <div className="flex items-start gap-3">
+              <Cookie size={20} className="text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-hero text-sm font-semibold mb-1">🍪 Cookie Notice</p>
+                <p className="text-sub text-xs leading-relaxed mb-3">We use cookies to improve your experience and remember your preferences (theme, language).</p>
+                <div className="flex items-center gap-2">
+                  <button onClick={acceptCookies} className="px-4 py-2 rounded-lg bg-green-500 text-white text-xs font-semibold cursor-pointer hover:bg-green-600 transition-all">Accept All</button>
+                  <button onClick={acceptCookies} className="px-4 py-2 rounded-lg card-surface text-sub text-xs font-medium cursor-pointer hover:text-hero transition-all">Necessary Only</button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Full Preview Overlay */}
       <AnimatePresence>
@@ -348,21 +519,29 @@ export default function App() {
                   <div className="flex items-center gap-2 text-dim"><Layers size={14} className="text-cyan-400" /><span className="text-xs">Riverpod + Firebase</span></div>
                   <div className="flex items-center gap-2 text-dim"><FolderArchive size={14} className="text-amber-400" /><span className="text-xs">Full project</span></div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                   {user && (
                     <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                       onClick={() => setPage('dashboard')}
-                      className="px-4 py-3 rounded-xl card-surface text-hero text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer"
+                      className="px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl card-surface text-hero text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer"
                     >
-                      <LayoutDashboard size={16} className="text-green-400" /> Dashboard
+                      <LayoutDashboard size={14} className="text-green-400" /> <span className="hidden sm:inline">Dashboard</span>
                     </motion.button>
                   )}
                   <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                     onClick={() => setShowFullPreview(true)}
-                    className="px-4 py-3 rounded-xl card-surface text-hero text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer"
+                    className="px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl card-surface text-hero text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer"
                   >
-                    <Maximize2 size={16} className="text-green-400" /> Preview
+                    <Maximize2 size={14} className="text-green-400" /> Preview
                   </motion.button>
+                  {!user && (
+                    <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                      onClick={() => setShowAuth(true)}
+                      className="px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer hover:bg-purple-500/20"
+                    >
+                      <Star size={14} /> 14-day Free Trial
+                    </motion.button>
+                  )}
                   <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={handleDownload} disabled={isDownloading}
                     className="px-6 py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white text-sm font-bold hover:shadow-lg hover:shadow-green-500/25 transition-all flex items-center gap-2.5 cursor-pointer disabled:opacity-60 relative overflow-hidden group"
                   >
@@ -400,9 +579,11 @@ interface AppHeaderProps {
   onBack: () => void;
   onLogin: () => void;
   extra?: React.ReactNode;
+  onApiSettings?: () => void;
+  hasApiKey?: boolean;
 }
 
-const AppHeader: React.FC<AppHeaderProps> = ({ theme, toggleTheme, user, onSignOut, onDashboard, onBack, onLogin, extra }) => {
+const AppHeader: React.FC<AppHeaderProps & { onPricing?: () => void }> = ({ theme, toggleTheme, user, onSignOut, onDashboard, onBack, onLogin, extra, onPricing, onApiSettings, hasApiKey }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   return (
@@ -421,8 +602,39 @@ const AppHeader: React.FC<AppHeaderProps> = ({ theme, toggleTheme, user, onSignO
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="hidden md:flex items-center gap-1 text-[11px] text-dim">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* AI Connect Button — ALWAYS VISIBLE on all screen sizes */}
+          {onApiSettings && (
+            <motion.button
+              onClick={onApiSettings}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 shadow-lg ${
+                hasApiKey 
+                  ? 'bg-green-500/15 border-2 border-green-500/40 text-green-400 hover:bg-green-500/25 shadow-green-500/10' 
+                  : 'bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-2 border-amber-500/40 text-amber-400 hover:from-amber-500/30 hover:to-orange-500/30 shadow-amber-500/10 animate-pulse'
+              }`}
+            >
+              <Key size={14} />
+              <span className="hidden xs:inline">{hasApiKey ? '✓ AI Connected' : '🔑 Connect AI'}</span>
+              <span className="xs:hidden">{hasApiKey ? '✓' : '🔑'}</span>
+            </motion.button>
+          )}
+
+          {/* Desktop nav links */}
+          <div className="hidden md:flex items-center gap-1">
+            {user && (
+              <button onClick={onDashboard} className="px-3 py-1.5 rounded-lg text-[11px] text-sub hover:text-hero hover:bg-white/5 transition-all cursor-pointer font-medium">
+                My Apps
+              </button>
+            )}
+            {onPricing && (
+              <button onClick={onPricing} className="px-3 py-1.5 rounded-lg text-[11px] text-sub hover:text-hero hover:bg-white/5 transition-all cursor-pointer font-medium flex items-center gap-1">
+                <CreditCard size={11} /> Pricing
+              </button>
+            )}
+          </div>
+          <div className="hidden lg:flex items-center gap-1 text-[11px] text-dim">
             <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
             <span>AI Engine Active</span>
           </div>
@@ -502,9 +714,13 @@ interface InputPhaseProps {
   updateField: (field: keyof BusinessFormData, value: string | boolean) => void;
   onStart: () => void;
   isValid: boolean;
+  onOpenTemplates: () => void;
+  onOpenAiSettings: () => void;
+  hasApiKey: boolean;
+  aiProvider?: string;
 }
 
-const InputPhase: React.FC<InputPhaseProps> = ({ formData, updateField, onStart, isValid }) => (
+const InputPhase: React.FC<InputPhaseProps> = ({ formData, updateField, onStart, isValid, onOpenTemplates, onOpenAiSettings, hasApiKey, aiProvider }) => (
   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="max-w-[1600px] mx-auto px-4 sm:px-6 py-8 sm:py-12">
     <div className="text-center mb-10 sm:mb-14">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
@@ -526,9 +742,14 @@ const InputPhase: React.FC<InputPhaseProps> = ({ formData, updateField, onStart,
 
     <div className="grid lg:grid-cols-[1fr_380px] gap-8 max-w-5xl mx-auto">
       <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }} className="glass-card rounded-2xl p-6 sm:p-8">
-        <div className="flex items-center gap-2 mb-6">
-          <Sparkles size={16} className="text-green-400" />
-          <h3 className="text-base font-bold text-hero">Tell us about your business</h3>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <Sparkles size={16} className="text-green-400" />
+            <h3 className="text-base font-bold text-hero">Tell us about your business</h3>
+          </div>
+          <button onClick={onOpenTemplates} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[11px] font-medium cursor-pointer hover:bg-purple-500/20 transition-all">
+            <LayoutGrid size={12} /> Templates
+          </button>
         </div>
         <div className="space-y-4">
           <div>
@@ -590,15 +811,94 @@ const InputPhase: React.FC<InputPhaseProps> = ({ formData, updateField, onStart,
             </div>
           </div>
         </div>
+        {/* AI Connection Card — PROMINENT */}
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          transition={{ delay: 0.6 }}
+          className={`mt-6 p-5 rounded-2xl border-2 cursor-pointer transition-all group ${
+            hasApiKey 
+              ? 'bg-green-500/5 border-green-500/30 hover:bg-green-500/10 hover:border-green-500/50' 
+              : 'bg-gradient-to-r from-amber-500/5 to-orange-500/5 border-amber-500/30 hover:from-amber-500/10 hover:to-orange-500/10 hover:border-amber-500/50'
+          }`}
+          onClick={onOpenAiSettings}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-lg ${
+                hasApiKey ? 'bg-green-500/20 shadow-green-500/10' : 'bg-amber-500/20 shadow-amber-500/10'
+              }`}>
+                {hasApiKey ? '🤖' : '⚡'}
+              </div>
+              <div>
+                <p className="text-sm sm:text-base font-bold text-hero flex items-center gap-2">
+                  {hasApiKey ? (
+                    <>
+                      <span className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse" />
+                      AI Connected — {aiProvider === 'groq' ? 'Groq' : aiProvider === 'openai' ? 'OpenAI' : aiProvider === 'anthropic' ? 'Anthropic' : 'xAI'}
+                    </>
+                  ) : (
+                    '🔑 Connect je AI — klik hier!'
+                  )}
+                </p>
+                <p className="text-xs text-sub mt-0.5">
+                  {hasApiKey 
+                    ? '✨ Real AI-generated Flutter code will be used during build' 
+                    : 'Voer je gratis Groq API key in voor echte AI code generatie'}
+                </p>
+              </div>
+            </div>
+            <motion.div 
+              className={`px-4 py-2 rounded-xl text-xs font-bold shrink-0 ${
+                hasApiKey 
+                  ? 'bg-green-500/20 text-green-400' 
+                  : 'bg-amber-500/20 text-amber-400 group-hover:bg-amber-500/30'
+              }`}
+              whileHover={{ scale: 1.05 }}
+            >
+              {hasApiKey ? '✓ Active' : 'Setup →'}
+            </motion.div>
+          </div>
+          {!hasApiKey && (
+            <div className="mt-4 p-3 rounded-xl bg-white/[0.03] border border-soft">
+              <p className="text-xs text-sub font-medium mb-2">⚡ In 3 simpele stappen:</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="flex items-center gap-2 text-[11px] text-dim">
+                  <span className="w-5 h-5 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center text-[10px] font-bold shrink-0">1</span>
+                  <span>Ga naar <strong className="text-sub">console.groq.com</strong></span>
+                </div>
+                <div className="flex items-center gap-2 text-[11px] text-dim">
+                  <span className="w-5 h-5 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center text-[10px] font-bold shrink-0">2</span>
+                  <span>Kopieer je <strong className="text-sub">API key</strong></span>
+                </div>
+                <div className="flex items-center gap-2 text-[11px] text-dim">
+                  <span className="w-5 h-5 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center text-[10px] font-bold shrink-0">3</span>
+                  <span>Plak hier → <strong className="text-green-400">klaar! ✓</strong></span>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 mt-3 text-[10px] text-dim border-t border-soft pt-2">
+                <span className="flex items-center gap-1"><Zap size={10} className="text-green-400" /> 100% gratis</span>
+                <span>•</span>
+                <span>Geen creditcard</span>
+                <span>•</span>
+                <span>~750 tokens/sec</span>
+                <span>•</span>
+                <span>Llama 3.3 70B</span>
+              </div>
+            </div>
+          )}
+        </motion.div>
+
         <motion.button whileHover={{ scale: isValid ? 1.01 : 1 }} whileTap={{ scale: isValid ? 0.98 : 1 }}
           onClick={isValid ? onStart : undefined} disabled={!isValid}
-          className={`w-full mt-8 py-4 rounded-xl text-white font-bold text-base flex items-center justify-center gap-3 transition-all ${
+          className={`w-full mt-4 py-4 rounded-xl text-white font-bold text-base flex items-center justify-center gap-3 transition-all ${
             isValid ? 'bg-gradient-to-r from-green-500 to-emerald-600 shadow-lg shadow-green-500/25 hover:shadow-green-500/40 cursor-pointer pulse-glow' : 'bg-white/10 text-white/30 cursor-not-allowed'
           }`}
         >
-          <Rocket size={20} /> 🚀 Start Autonomous Agent
+          <Rocket size={20} /> {hasApiKey ? '🤖 Start AI Agent' : '🚀 Start Autonomous Agent'}
         </motion.button>
         {!isValid && <p className="text-center text-dim text-xs mt-2">Fill in the required fields to continue</p>}
+        {isValid && hasApiKey && <p className="text-center text-green-400/60 text-xs mt-2">✨ Real AI code generation enabled</p>}
       </motion.div>
 
       <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }} className="space-y-4">
@@ -699,19 +999,16 @@ const BuildPhase: React.FC<BuildPhaseProps> = ({ formData, logs, currentStep, pr
         className="flex flex-col items-center justify-start py-2 order-1 lg:order-2"
       >
         <div className="sticky top-4">
-          <PhonePreview data={formData} currentStep={currentStep} isBuilding={phase === 'building' || phase === 'complete'} interactive={phase === 'complete'} />
-          <div className="text-center mt-4">
-            <p className="text-[10px] text-dim uppercase tracking-widest font-medium">Live Preview</p>
-            {phase === 'complete' && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-3">
-                <button onClick={onOpenPreview} className="text-[11px] font-medium px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 mx-auto cursor-pointer"
-                  style={{ color: formData.primaryColor, background: `${formData.primaryColor}15`, border: `1px solid ${formData.primaryColor}25` }}
-                >
-                  <Maximize2 size={12} /> Full Interactive Preview
-                </button>
-              </motion.div>
-            )}
-          </div>
+          <DevicePreview data={formData} currentStep={currentStep} isBuilding={phase === 'building' || phase === 'complete'} interactive={phase === 'complete'} />
+          {phase === 'complete' && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-3 text-center">
+              <button onClick={onOpenPreview} className="text-[11px] font-medium px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 mx-auto cursor-pointer"
+                style={{ color: formData.primaryColor, background: `${formData.primaryColor}15`, border: `1px solid ${formData.primaryColor}25` }}
+              >
+                <Maximize2 size={12} /> Full Interactive Preview
+              </button>
+            </motion.div>
+          )}
         </div>
       </motion.div>
 

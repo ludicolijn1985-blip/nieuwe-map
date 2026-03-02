@@ -1,308 +1,281 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Copy, Check, FileCode, ChevronDown, ChevronRight, Code2, Sparkles } from 'lucide-react';
-
-interface CodeFile {
-  filename: string;
-  code: string;
-}
+import { FileCode2, Copy, Check, ChevronRight, ChevronDown, Search, FolderOpen, Folder, X } from 'lucide-react';
 
 interface CodeViewerProps {
-  files: CodeFile[];
+  files: { filename: string; code: string }[];
   currentStep: number;
-  onCopyFile?: (code: string) => void;
+  onCopyFile: (code: string) => void;
+}
+
+// Simple syntax highlighting for Dart
+function highlightDart(code: string): React.ReactNode[] {
+  const lines = code.split('\n');
+  return lines.map((line, i) => {
+    let highlighted = line
+      .replace(/\/\/.*/g, '<span class="code-comment">$&</span>')
+      .replace(/('.*?'|".*?")/g, '<span class="code-string">$1</span>')
+      .replace(/\b(import|class|extends|implements|with|const|final|var|void|int|double|String|bool|List|Map|Future|async|await|return|if|else|switch|case|for|while|break|continue|try|catch|throw|new|this|super|static|late|required|override|enum|abstract|mixin)\b/g, '<span class="code-keyword">$1</span>')
+      .replace(/\b(true|false|null)\b/g, '<span class="code-literal">$1</span>')
+      .replace(/@\w+/g, '<span class="code-annotation">$&</span>')
+      .replace(/\b([A-Z]\w+)\b/g, (match) => {
+        if (match.match(/^(String|List|Map|Future|int|double|bool)$/)) return match;
+        return `<span class="code-type">${match}</span>`;
+      });
+    return (
+      <div key={i} className="code-line group flex">
+        <span className="code-line-number w-10 text-right pr-3 select-none shrink-0 text-dim opacity-40 group-hover:opacity-70 transition-opacity">
+          {i + 1}
+        </span>
+        <span className="code-content flex-1" dangerouslySetInnerHTML={{ __html: highlighted || '&nbsp;' }} />
+      </div>
+    );
+  });
+}
+
+// Build file tree structure
+function buildFileTree(files: { filename: string }[]): { folders: Set<string>; tree: Map<string, string[]> } {
+  const folders = new Set<string>();
+  const tree = new Map<string, string[]>();
+  
+  files.forEach(f => {
+    const parts = f.filename.split('/');
+    if (parts.length > 1) {
+      const folder = parts.slice(0, -1).join('/');
+      folders.add(folder);
+      if (!tree.has(folder)) tree.set(folder, []);
+      tree.get(folder)!.push(f.filename);
+    } else {
+      if (!tree.has('root')) tree.set('root', []);
+      tree.get('root')!.push(f.filename);
+    }
+  });
+
+  return { folders, tree };
 }
 
 const CodeViewer: React.FC<CodeViewerProps> = ({ files, currentStep, onCopyFile }) => {
-  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
-  const [expandedFiles, setExpandedFiles] = useState<Set<number>>(new Set([0]));
-  const [visibleLines, setVisibleLines] = useState<Record<number, number>>({});
+  const [activeFile, setActiveFile] = useState(0);
+  const [copiedIdx, setCopiedIdx] = useState(-1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+  const [showTree, setShowTree] = useState(true);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['root']));
 
-  // Determine which files are visible based on the current step
-  const getVisibleFileCount = () => {
-    if (currentStep >= 9) return files.length;
-    if (currentStep >= 8) return Math.min(5, files.length);
-    if (currentStep >= 6) return Math.min(4, files.length);
-    if (currentStep >= 4) return Math.min(3, files.length);
-    if (currentStep >= 3) return Math.min(2, files.length);
-    if (currentStep >= 1) return Math.min(1, files.length);
-    return 0;
-  };
+  const visibleFiles = useMemo(() => {
+    const count = Math.min(files.length, Math.max(1, Math.ceil((currentStep / 9) * files.length)));
+    return files.slice(0, count);
+  }, [files, currentStep]);
 
-  const visibleFileCount = getVisibleFileCount();
-  const visibleFiles = files.slice(0, visibleFileCount);
+  const filteredCode = useMemo(() => {
+    if (!visibleFiles[activeFile]) return [];
+    const code = visibleFiles[activeFile].code;
+    if (!searchQuery) return highlightDart(code);
+    return highlightDart(code);
+  }, [visibleFiles, activeFile, searchQuery]);
 
-  // Simulate streaming lines for the latest file
-  useEffect(() => {
-    if (visibleFileCount <= 0) return;
-    
-    const latestIdx = visibleFileCount - 1;
-    const file = files[latestIdx];
-    if (!file) return;
-    
-    const totalLines = file.code.split('\n').length;
-    
-    // If this file already has all lines, skip
-    if (visibleLines[latestIdx] >= totalLines) return;
+  const { tree } = useMemo(() => buildFileTree(visibleFiles), [visibleFiles]);
 
-    // Start streaming lines
-    setVisibleLines(prev => ({ ...prev, [latestIdx]: 0 }));
-    
-    let lineCount = 0;
-    const interval = setInterval(() => {
-      lineCount += Math.floor(Math.random() * 3) + 1;
-      if (lineCount >= totalLines) {
-        lineCount = totalLines;
-        clearInterval(interval);
-      }
-      setVisibleLines(prev => ({ ...prev, [latestIdx]: lineCount }));
-    }, 80);
+  const handleCopy = useCallback((idx: number) => {
+    onCopyFile(visibleFiles[idx].code);
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx(-1), 2000);
+  }, [visibleFiles, onCopyFile]);
 
-    return () => clearInterval(interval);
-  }, [visibleFileCount, files]);
+  const toggleFolder = useCallback((folder: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(folder)) next.delete(folder); else next.add(folder);
+      return next;
+    });
+  }, []);
 
-  // Mark all previous files as fully visible
-  useEffect(() => {
-    const newVisible: Record<number, number> = {};
-    for (let i = 0; i < visibleFileCount - 1; i++) {
-      if (files[i]) {
-        newVisible[i] = files[i].code.split('\n').length;
-      }
-    }
-    setVisibleLines(prev => ({ ...prev, ...newVisible }));
-  }, [visibleFileCount, files]);
+  if (visibleFiles.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-3 py-20">
+        <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}>
+          <FileCode2 size={24} className="text-purple-400" />
+        </motion.div>
+        <p className="text-dim text-xs">Generating code...</p>
+      </div>
+    );
+  }
 
-  const handleCopy = async (code: string, index: number) => {
-    try {
-      await navigator.clipboard.writeText(code);
-      onCopyFile?.(code);
-    } catch {
-      // clipboard API not available
-    }
-    setCopiedIndex(index);
-    setTimeout(() => setCopiedIndex(null), 2000);
-  };
-
-  const toggleFile = (index: number) => {
-    const newSet = new Set(expandedFiles);
-    if (newSet.has(index)) {
-      newSet.delete(index);
-    } else {
-      newSet.add(index);
-    }
-    setExpandedFiles(newSet);
-  };
-
-  // Auto-expand newly added file
-  useEffect(() => {
-    if (visibleFileCount > 0) {
-      setExpandedFiles(prev => {
-        const newSet = new Set(prev);
-        newSet.add(visibleFileCount - 1);
-        return newSet;
-      });
-    }
-  }, [visibleFileCount]);
+  const safeActive = Math.min(activeFile, visibleFiles.length - 1);
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between mb-3 px-1">
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <Code2 size={14} className="text-purple-400" />
-          <span className="text-xs font-semibold text-white/70 uppercase tracking-wider">Flutter Code</span>
+          <FileCode2 size={14} className="text-purple-400" />
+          <span className="text-xs font-bold text-hero uppercase tracking-wider">Flutter Code</span>
+          <span className="text-[10px] text-dim bg-purple-500/10 px-2 py-0.5 rounded-full">
+            {visibleFiles.length} files
+          </span>
         </div>
-        <span className="text-[10px] text-purple-400/60 bg-purple-400/10 px-2 py-0.5 rounded-full font-mono border border-purple-400/10">
-          {visibleFiles.length} file{visibleFiles.length !== 1 ? 's' : ''}
-        </span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setShowTree(!showTree)}
+            className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer hover:bg-white/5 transition-all"
+            title="Toggle file tree"
+          >
+            <FolderOpen size={12} className={showTree ? 'text-green-400' : 'text-dim'} />
+          </button>
+          <button
+            onClick={() => setShowSearch(!showSearch)}
+            className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer hover:bg-white/5 transition-all"
+            title="Search in code"
+          >
+            <Search size={12} className={showSearch ? 'text-green-400' : 'text-dim'} />
+          </button>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-        <AnimatePresence>
-          {visibleFiles.map((file, index) => {
-            const lines = file.code.split('\n');
-            const shownLineCount = visibleLines[index] ?? lines.length;
-            const shownLines = lines.slice(0, shownLineCount);
-            const isStreaming = shownLineCount < lines.length;
-            const isExpanded = expandedFiles.has(index);
-            const isLatest = index === visibleFileCount - 1 && currentStep < 9;
-
-            return (
-              <motion.div
-                key={file.filename}
-                initial={{ opacity: 0, y: 12, height: 0 }}
-                animate={{ opacity: 1, y: 0, height: 'auto' }}
-                transition={{ duration: 0.4, ease: 'easeOut' }}
-                className={`rounded-xl overflow-hidden transition-all ${
-                  isLatest
-                    ? 'border border-purple-500/20 shadow-sm shadow-purple-500/5'
-                    : 'border border-white/5 hover:border-white/10'
-                }`}
-                style={{ background: '#0c0c14' }}
-              >
-                {/* File header */}
-                <button
-                  onClick={() => toggleFile(index)}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 bg-white/[0.02] hover:bg-white/[0.04] transition-colors text-left group"
-                >
-                  {isExpanded ? (
-                    <ChevronDown size={11} className="text-white/25 group-hover:text-white/40 transition-colors" />
-                  ) : (
-                    <ChevronRight size={11} className="text-white/25 group-hover:text-white/40 transition-colors" />
-                  )}
-                  <FileCode size={12} className="text-purple-400/60" />
-                  <span className="text-[11px] font-mono text-purple-300 font-medium flex-1">{file.filename}</span>
-                  
-                  {isStreaming && (
-                    <motion.div
-                      animate={{ opacity: [0.4, 1, 0.4] }}
-                      transition={{ duration: 1, repeat: Infinity }}
-                      className="flex items-center gap-1 text-[9px] text-cyan-400/60"
-                    >
-                      <Sparkles size={9} />
-                      writing...
-                    </motion.div>
-                  )}
-
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleCopy(file.code, index); }}
-                    className="p-1.5 rounded-md hover:bg-white/10 transition-colors ml-1"
-                    title="Copy file"
-                  >
-                    {copiedIndex === index ? (
-                      <Check size={12} className="text-green-400" />
-                    ) : (
-                      <Copy size={12} className="text-white/25 hover:text-white/50" />
-                    )}
-                  </button>
+      {/* Search bar */}
+      <AnimatePresence>
+        {showSearch && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mb-2">
+            <div className="relative">
+              <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-dim" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search in code..."
+                className="w-full pl-8 pr-8 py-2 rounded-lg input-field text-xs focus:outline-none"
+                autoFocus
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer">
+                  <X size={12} className="text-dim hover:text-sub" />
                 </button>
-
-                {/* Code content */}
-                <AnimatePresence>
-                  {isExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.25 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="px-3 py-2 border-t border-white/5 overflow-x-auto max-h-[220px] overflow-y-auto">
-                        <pre className="text-[10px] leading-[1.7] font-mono">
-                          <code>
-                            {shownLines.map((line, lineIdx) => (
-                              <div key={lineIdx} className="flex hover:bg-white/[0.02] rounded-sm">
-                                <span className="text-white/12 select-none w-7 text-right mr-3 inline-block flex-shrink-0 text-[9px]">
-                                  {lineIdx + 1}
-                                </span>
-                                <span className="text-white/65">
-                                  {highlightSyntax(line)}
-                                </span>
-                              </div>
-                            ))}
-                            {isStreaming && (
-                              <motion.div
-                                animate={{ opacity: [0.3, 0.8, 0.3] }}
-                                transition={{ duration: 0.8, repeat: Infinity }}
-                                className="flex items-center gap-1 pl-10 mt-1"
-                              >
-                                <span className="text-cyan-400/40 text-[9px]">▌</span>
-                              </motion.div>
-                            )}
-                          </code>
-                        </pre>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
-
-        {/* Generating placeholder */}
-        {currentStep >= 1 && currentStep < 9 && (
-          <motion.div
-            animate={{ opacity: [0.3, 0.5, 0.3] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="rounded-xl p-4 border border-white/5 bg-white/[0.01] text-center"
-          >
-            <div className="flex items-center justify-center gap-2">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-              >
-                <Sparkles size={12} className="text-purple-400/40" />
-              </motion.div>
-              <p className="text-[10px] text-white/25 font-mono">Generating more files...</p>
+              )}
             </div>
           </motion.div>
         )}
+      </AnimatePresence>
 
-        {/* Complete state */}
-        {currentStep >= 9 && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="rounded-xl p-3 bg-gradient-to-r from-purple-500/8 to-cyan-500/5 border border-purple-500/15 text-center"
-          >
-            <p className="text-[10px] text-purple-300/70 font-medium">✨ All {files.length} files generated successfully</p>
-            <p className="text-[9px] text-white/25 mt-0.5">Ready for deployment</p>
-          </motion.div>
-        )}
+      <div className="flex flex-1 gap-2 min-h-0 overflow-hidden">
+        {/* File Tree */}
+        <AnimatePresence>
+          {showTree && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 140, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              className="shrink-0 overflow-y-auto overflow-x-hidden border-r border-soft pr-2"
+            >
+              {Array.from(tree.entries()).map(([folder, fileNames]) => (
+                <div key={folder} className="mb-1">
+                  {folder !== 'root' && (
+                    <button
+                      onClick={() => toggleFolder(folder)}
+                      className="flex items-center gap-1 text-[10px] text-sub hover:text-hero w-full py-0.5 cursor-pointer transition-colors"
+                    >
+                      {expandedFolders.has(folder) ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                      <Folder size={10} className="text-amber-400" />
+                      <span className="truncate">{folder.split('/').pop()}</span>
+                    </button>
+                  )}
+                  {(folder === 'root' || expandedFolders.has(folder)) && (
+                    <div className={folder !== 'root' ? 'ml-3' : ''}>
+                      {fileNames.map(fn => {
+                        const idx = visibleFiles.findIndex(f => f.filename === fn);
+                        const isActive = idx === safeActive;
+                        return (
+                          <button
+                            key={fn}
+                            onClick={() => setActiveFile(idx)}
+                            className={`flex items-center gap-1 text-[10px] w-full py-0.5 px-1 rounded cursor-pointer transition-all truncate ${
+                              isActive ? 'text-green-400 bg-green-500/10' : 'text-dim hover:text-sub hover:bg-white/5'
+                            }`}
+                          >
+                            <FileCode2 size={9} className="shrink-0" />
+                            <span className="truncate">{fn.split('/').pop()}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Code panel */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* File tabs */}
+          <div className="flex items-center gap-1 mb-2 overflow-x-auto pb-1 shrink-0">
+            {visibleFiles.map((file, idx) => (
+              <motion.button
+                key={file.filename}
+                initial={{ opacity: 0, y: -5 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.05 }}
+                onClick={() => setActiveFile(idx)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium whitespace-nowrap cursor-pointer transition-all ${
+                  idx === safeActive
+                    ? 'bg-green-500/15 text-green-400 border border-green-500/25'
+                    : 'text-dim hover:text-sub hover:bg-white/5'
+                }`}
+              >
+                <FileCode2 size={10} />
+                {file.filename.split('/').pop()}
+              </motion.button>
+            ))}
+          </div>
+
+          {/* Active file header */}
+          <div className="flex items-center justify-between mb-2 shrink-0">
+            <span className="text-[10px] font-mono text-dim truncate">
+              lib/{visibleFiles[safeActive]?.filename}
+            </span>
+            <button
+              onClick={() => handleCopy(safeActive)}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-medium cursor-pointer transition-all ${
+                copiedIdx === safeActive
+                  ? 'bg-green-500/15 text-green-400'
+                  : 'bg-white/5 text-dim hover:text-sub hover:bg-white/10'
+              }`}
+            >
+              {copiedIdx === safeActive ? <><Check size={10} /> Copied</> : <><Copy size={10} /> Copy</>}
+            </button>
+          </div>
+
+          {/* Code content */}
+          <div className="flex-1 overflow-auto rounded-xl bg-black/20 border border-soft font-mono text-[11px] leading-[1.7] p-3">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={safeActive}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+              >
+                {filteredCode}
+                {currentStep < 9 && safeActive === visibleFiles.length - 1 && (
+                  <div className="code-line flex items-center gap-2 mt-1">
+                    <span className="code-line-number w-10 text-right pr-3 text-dim opacity-40">
+                      {visibleFiles[safeActive]?.code.split('\n').length + 1}
+                    </span>
+                    <motion.span
+                      animate={{ opacity: [0.3, 1, 0.3] }}
+                      transition={{ duration: 1.2, repeat: Infinity }}
+                      className="text-green-400 text-[10px]"
+                    >
+                      █ writing...
+                    </motion.span>
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </div>
       </div>
     </div>
   );
 };
-
-function highlightSyntax(line: string): React.ReactNode {
-  const keywords = ['import', 'class', 'extends', 'const', 'final', 'return', 'void', 'static', 'get', 'override', 'required', 'this', 'super', 'new', 'if', 'else', 'true', 'false'];
-  const types = ['Widget', 'BuildContext', 'State', 'StatelessWidget', 'StatefulWidget', 'ThemeData', 'MaterialApp', 'Scaffold', 'Color', 'String', 'int', 'bool', 'double', 'EdgeInsets', 'BoxDecoration', 'BorderRadius', 'Text', 'Column', 'Row', 'Container', 'Icon', 'Icons'];
-
-  if (line.trim().startsWith('import ') || line.trim().startsWith('//')) {
-    return <span className="text-green-400/50">{line}</span>;
-  }
-  if (line.trim().startsWith('@')) {
-    return <span className="text-yellow-400/60">{line}</span>;
-  }
-
-  if (line.includes("'")) {
-    const parts = line.split(/('.*?')/);
-    return (
-      <>
-        {parts.map((part, i) =>
-          part.startsWith("'") && part.endsWith("'") ? (
-            <span key={i} className="text-amber-300/60">{part}</span>
-          ) : (
-            <span key={i}>{colorizeTokens(part, keywords, types)}</span>
-          )
-        )}
-      </>
-    );
-  }
-
-  return colorizeTokens(line, keywords, types);
-}
-
-function colorizeTokens(text: string, keywords: string[], types: string[]): React.ReactNode {
-  const tokens = text.split(/(\s+)/);
-  return (
-    <>
-      {tokens.map((token, i) => {
-        const cleanToken = token.replace(/[^a-zA-Z]/g, '');
-        if (keywords.includes(cleanToken)) {
-          return <span key={i} className="text-purple-400/70">{token}</span>;
-        }
-        if (types.includes(cleanToken)) {
-          return <span key={i} className="text-cyan-400/70">{token}</span>;
-        }
-        if (/^\d+/.test(token.trim())) {
-          return <span key={i} className="text-orange-400/60">{token}</span>;
-        }
-        return <span key={i}>{token}</span>;
-      })}
-    </>
-  );
-}
 
 export default CodeViewer;

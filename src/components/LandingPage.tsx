@@ -587,13 +587,13 @@ const pricingTiers = (t: typeof nl, annual: boolean) => [
     features: [t.pf1, t.pf2, t.pf3, t.pf4],
   },
   {
-    name: 'Professional', price: annual ? '€23' : '€29', period: annual ? t.perMonth : t.perMonth,
+    name: 'Professional', price: annual ? '€39' : '€49', period: annual ? t.perMonth : t.perMonth,
     desc: t.priceProDesc, popular: true,
     cta: t.priceProCta,
     features: [t.pp1, t.pp2, t.pp3, t.pp4, t.pp5, t.pp6],
   },
   {
-    name: 'Agency', price: annual ? '€79' : '€99', period: annual ? t.perMonth : t.perMonth,
+    name: 'Agency', price: annual ? '€159' : '€199', period: annual ? t.perMonth : t.perMonth,
     desc: t.priceAgencyDesc, popular: false,
     cta: t.priceAgencyCta,
     features: [t.pa1, t.pa2, t.pa3, t.pa4, t.pa5, t.pa6],

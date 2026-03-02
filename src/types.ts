@@ -46,7 +46,7 @@ export interface UserProfile {
   plan: 'free' | 'pro' | 'agency';
   trialEndsAt?: string;
   apiKey?: string;
-  aiProvider?: 'openai' | 'anthropic' | 'grok';
+  aiProvider?: 'openai' | 'anthropic' | 'grok' | 'groq';
   createdAt: string;
   appsBuilt: number;
   teamId?: string;
