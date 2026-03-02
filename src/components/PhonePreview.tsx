@@ -77,30 +77,27 @@ const PhonePreview: React.FC<PhonePreviewProps> = ({ data, currentStep, isBuildi
 
   const getTypeEmoji = () => {
     const map: Record<string, string> = {
-      'Restaurant': '🍽️', 'Café': '☕', 'Kapsalon': '✂️', 'Sportschool': '💪',
-      'Bakkerij': '🥐', 'Winkel': '🛍️', 'Tandarts': '🦷', 'Fysiotherapie': '💆',
-      'Schoonheidssalon': '💅', 'Autogarage': '🔧'
+      'Autowasstraat': '🚗', 'Bakkerij': '🥐', 'Barbershop': '💈',
+      'Bloemist': '💐', 'Boekhandel': '📚', 'Café/Restaurant': '☕',
+      'Fietsenmaker': '🚲', 'Fotostudio': '📸', 'Huisartsenpraktijk': '🏥',
+      'IJssalon': '🍦', 'Kapsalon': '✂️', 'Kledingwinkel': '👗',
+      'Massage salon': '💆', 'Nagelstudio': '💅', 'Pet grooming': '🐾',
+      'Sportschool/Fitness': '💪', 'Sushi takeaway': '🍣', 'Tattoo shop': '🎨',
+      'Trimsalon': '🐶', 'Wijnbar': '🍷', 'Yoga/Pilates studio': '🧘',
+      'Yoga studio': '🧘',
     };
     return map[businessType] || '✨';
   };
 
   const getMenuItems = () => {
     const menus: Record<string, { name: string; price: string; emoji: string; desc: string }[]> = {
-      'Restaurant': [
-        { name: 'Pasta Carbonara', price: '€14.50', emoji: '🍝', desc: 'Creamy Italian classic' },
-        { name: 'Grilled Salmon', price: '€18.00', emoji: '🐟', desc: 'With lemon butter sauce' },
-        { name: 'Caesar Salad', price: '€11.50', emoji: '🥗', desc: 'Fresh romaine, croutons' },
-        { name: 'Tiramisu', price: '€8.50', emoji: '🍰', desc: 'Homemade dessert' },
-        { name: 'Margherita Pizza', price: '€12.00', emoji: '🍕', desc: 'Wood-fired, fresh basil' },
-        { name: 'Risotto Fungi', price: '€15.50', emoji: '🍄', desc: 'Wild mushroom risotto' },
-      ],
-      'Café': [
+      'Café/Restaurant': [
         { name: 'Espresso', price: '€3.00', emoji: '☕', desc: 'Double shot, bold flavor' },
         { name: 'Cappuccino', price: '€4.50', emoji: '🥤', desc: 'Silky foam, perfect art' },
         { name: 'Croissant', price: '€3.50', emoji: '🥐', desc: 'Butter, flaky, fresh' },
         { name: 'Avocado Toast', price: '€9.50', emoji: '🥑', desc: 'Sourdough, chili flakes' },
-        { name: 'Cheesecake', price: '€6.00', emoji: '🍰', desc: 'New York style' },
-        { name: 'Fresh Juice', price: '€5.50', emoji: '🍊', desc: 'Orange, carrot, ginger' },
+        { name: 'Pasta Carbonara', price: '€14.50', emoji: '🍝', desc: 'Creamy Italian classic' },
+        { name: 'Tiramisu', price: '€8.50', emoji: '🍰', desc: 'Homemade dessert' },
       ],
       'Kapsalon': [
         { name: 'Heren Knipbeurt', price: '€25.00', emoji: '💇‍♂️', desc: '30 min, incl. styling' },
@@ -110,7 +107,7 @@ const PhonePreview: React.FC<PhonePreviewProps> = ({ data, currentStep, isBuildi
         { name: 'Bridal Styling', price: '€120.00', emoji: '👰', desc: 'Complete bridal look' },
         { name: 'Kids Knippen', price: '€18.00', emoji: '✂️', desc: 'Ages 3-12' },
       ],
-      'Sportschool': [
+      'Sportschool/Fitness': [
         { name: 'Yoga Class', price: '€12.00', emoji: '🧘', desc: 'Vinyasa flow, 60 min' },
         { name: 'HIIT Training', price: '€15.00', emoji: '🏋️', desc: 'High intensity, 45 min' },
         { name: 'Spinning', price: '€14.00', emoji: '🚴', desc: 'Cardio blast, 50 min' },
@@ -118,8 +115,160 @@ const PhonePreview: React.FC<PhonePreviewProps> = ({ data, currentStep, isBuildi
         { name: 'Pilates', price: '€13.00', emoji: '🤸', desc: 'Core strength, 55 min' },
         { name: 'Swimming', price: '€8.00', emoji: '🏊', desc: 'Open swim, per session' },
       ],
+      'Bakkerij': [
+        { name: 'Vers Brood', price: '€3.50', emoji: '🍞', desc: 'Zuurdesem, dagelijks vers' },
+        { name: 'Croissant', price: '€2.50', emoji: '🥐', desc: 'Roomboter, knapperig' },
+        { name: 'Appeltaart', price: '€4.00', emoji: '🥧', desc: 'Oma\'s recept' },
+        { name: 'Baguette', price: '€2.80', emoji: '🥖', desc: 'Frans, krokant' },
+        { name: 'Vlaai', price: '€3.50', emoji: '🍰', desc: 'Limburgse specialiteit' },
+        { name: 'Broodje Gezond', price: '€5.50', emoji: '🥪', desc: 'Vol belegd' },
+      ],
+      'Barbershop': [
+        { name: 'Classic Cut', price: '€25.00', emoji: '💈', desc: 'Wash, cut & style' },
+        { name: 'Beard Trim', price: '€15.00', emoji: '🧔', desc: 'Shape & oil' },
+        { name: 'Hot Towel Shave', price: '€20.00', emoji: '🪒', desc: 'Traditional straight razor' },
+        { name: 'Cut + Beard', price: '€35.00', emoji: '✂️', desc: 'Full service combo' },
+        { name: 'Kids Cut', price: '€15.00', emoji: '👦', desc: 'Under 12' },
+        { name: 'Head Shave', price: '€18.00', emoji: '🧑‍🦲', desc: 'Clean buzz/shave' },
+      ],
+      'Bloemist': [
+        { name: 'Boeket Rozen', price: '€25.00', emoji: '🌹', desc: '12 rode rozen' },
+        { name: 'Seizoensboeket', price: '€18.00', emoji: '💐', desc: 'Verse seizoensbloemen' },
+        { name: 'Orchidee', price: '€22.00', emoji: '🌸', desc: 'Phalaenopsis, wit' },
+        { name: 'Rouwstuk', price: '€55.00', emoji: '🌿', desc: 'Op maat gemaakt' },
+        { name: 'Bruidsboeket', price: '€75.00', emoji: '💒', desc: 'Persoonlijk advies' },
+        { name: 'Plantenbak', price: '€30.00', emoji: '🪴', desc: 'Binnentuin' },
+      ],
+      'Boekhandel': [
+        { name: 'Bestseller', price: '€22.50', emoji: '📖', desc: 'Top 10 deze week' },
+        { name: 'Kinderboek', price: '€14.99', emoji: '📚', desc: 'Prentenboeken' },
+        { name: 'Kookboek', price: '€29.95', emoji: '👨‍🍳', desc: 'Populaire recepten' },
+        { name: 'Thriller', price: '€18.50', emoji: '🔍', desc: 'Spannend & meeslepend' },
+        { name: 'Cadeaubon', price: '€15.00', emoji: '🎁', desc: 'Altijd goed' },
+        { name: 'Agenda 2025', price: '€16.95', emoji: '📅', desc: 'Premium design' },
+      ],
+      'Fietsenmaker': [
+        { name: 'Band Plakken', price: '€12.00', emoji: '🔧', desc: 'Voor- of achterband' },
+        { name: 'Grote Beurt', price: '€45.00', emoji: '🚲', desc: 'Complete check-up' },
+        { name: 'Remmen Afstellen', price: '€15.00', emoji: '⚙️', desc: 'Voor + achter' },
+        { name: 'Ketting Vervangen', price: '€25.00', emoji: '🔗', desc: 'Incl. materiaal' },
+        { name: 'Licht Reparatie', price: '€10.00', emoji: '💡', desc: 'LED voor/achter' },
+        { name: 'E-bike Service', price: '€65.00', emoji: '🔋', desc: 'Accu + motor check' },
+      ],
+      'Fotostudio': [
+        { name: 'Portretfoto', price: '€89.00', emoji: '📸', desc: '30 min sessie, 5 foto\'s' },
+        { name: 'Pasfoto Set', price: '€15.00', emoji: '🪪', desc: '4 pasfoto\'s' },
+        { name: 'Bruiloft Pakket', price: '€1200.00', emoji: '💒', desc: 'Hele dag, 200+ foto\'s' },
+        { name: 'Familie Shoot', price: '€149.00', emoji: '👨‍👩‍👧‍👦', desc: '1 uur, 15 foto\'s' },
+        { name: 'Product Foto', price: '€35.00', emoji: '📦', desc: 'Per product, 3 hoeken' },
+        { name: 'Baby Shoot', price: '€119.00', emoji: '👶', desc: 'Newborn specialist' },
+      ],
+      'Huisartsenpraktijk': [
+        { name: 'Consult', price: '€0.00', emoji: '🩺', desc: 'Verzekerd, 10 min' },
+        { name: 'Griepprik', price: '€0.00', emoji: '💉', desc: 'Seizoensvaccinatie' },
+        { name: 'Bloedonderzoek', price: '€0.00', emoji: '🩸', desc: 'Lab doorverwijzing' },
+        { name: 'Herhaalrecept', price: '€0.00', emoji: '💊', desc: 'Online aanvragen' },
+        { name: 'Telefonisch', price: '€0.00', emoji: '📞', desc: '5 min belconsult' },
+        { name: 'Spoedafspraak', price: '€0.00', emoji: '🚨', desc: 'Vandaag nog' },
+      ],
+      'IJssalon': [
+        { name: '1 Bol', price: '€2.50', emoji: '🍦', desc: 'Keuze uit 20+ smaken' },
+        { name: '2 Bollen', price: '€4.00', emoji: '🍨', desc: 'Mix & match' },
+        { name: 'Sundae', price: '€6.50', emoji: '🍧', desc: 'Met slagroom & topping' },
+        { name: 'Milkshake', price: '€5.50', emoji: '🥤', desc: 'Vers gemaakt' },
+        { name: 'Sorbet', price: '€3.00', emoji: '🍋', desc: 'Fruitig, vegan' },
+        { name: 'Wafel + IJs', price: '€7.50', emoji: '🧇', desc: 'Luikse wafel combo' },
+      ],
+      'Kledingwinkel': [
+        { name: 'T-Shirt', price: '€29.95', emoji: '👕', desc: 'Premium katoen' },
+        { name: 'Jeans', price: '€79.95', emoji: '👖', desc: 'Slim fit, stretch' },
+        { name: 'Sneakers', price: '€89.95', emoji: '👟', desc: 'Nieuwe collectie' },
+        { name: 'Jas', price: '€129.95', emoji: '🧥', desc: 'Wintercollectie' },
+        { name: 'Accessoires', price: '€19.95', emoji: '🧢', desc: 'Petten, riemen, tassen' },
+        { name: 'Jurk', price: '€59.95', emoji: '👗', desc: 'Seizoen must-have' },
+      ],
+      'Massage salon': [
+        { name: 'Ontspanningsmassage', price: '€55.00', emoji: '💆', desc: '60 min, full body' },
+        { name: 'Sportmassage', price: '€45.00', emoji: '💪', desc: '45 min, deep tissue' },
+        { name: 'Hot Stone', price: '€65.00', emoji: '🪨', desc: '75 min, warmte therapie' },
+        { name: 'Duo Massage', price: '€99.00', emoji: '👫', desc: '60 min, samen genieten' },
+        { name: 'Hoofdmassage', price: '€30.00', emoji: '🧠', desc: '30 min, stress relief' },
+        { name: 'Voetreflexologie', price: '€40.00', emoji: '🦶', desc: '45 min, balans' },
+      ],
+      'Nagelstudio': [
+        { name: 'Gel Manicure', price: '€35.00', emoji: '💅', desc: '2-3 weken houdbaarheid' },
+        { name: 'Acryl Nagels', price: '€50.00', emoji: '✨', desc: 'Nieuwe set' },
+        { name: 'Pedicure', price: '€30.00', emoji: '🦶', desc: 'Medisch of cosmetisch' },
+        { name: 'Nail Art', price: '€10.00', emoji: '🎨', desc: 'Per nagel, custom design' },
+        { name: 'Gel Verwijderen', price: '€15.00', emoji: '🧴', desc: 'Veilig verwijderen' },
+        { name: 'Russische Mani', price: '€45.00', emoji: '💎', desc: 'E-file, gel polish' },
+      ],
+      'Pet grooming': [
+        { name: 'Kleine Hond Trim', price: '€35.00', emoji: '🐕', desc: 'Tot 10 kg' },
+        { name: 'Grote Hond Trim', price: '€55.00', emoji: '🐕‍🦺', desc: '10+ kg, incl. bad' },
+        { name: 'Katten Verzorging', price: '€45.00', emoji: '🐱', desc: 'Ontklitten & knippen' },
+        { name: 'Nagels Knippen', price: '€12.00', emoji: '✂️', desc: 'Alle huisdieren' },
+        { name: 'Tanden Poetsen', price: '€15.00', emoji: '🦷', desc: 'Tandverzorging' },
+        { name: 'Spa Behandeling', price: '€45.00', emoji: '🛁', desc: 'Bad, föhn, parfum' },
+      ],
+      'Sushi takeaway': [
+        { name: 'California Roll', price: '€8.50', emoji: '🍣', desc: '8 stuks, krab & avocado' },
+        { name: 'Salmon Nigiri', price: '€9.00', emoji: '🐟', desc: '6 stuks, verse zalm' },
+        { name: 'Maki Mix', price: '€12.50', emoji: '🍱', desc: '16 stuks assortiment' },
+        { name: 'Ramen Bowl', price: '€13.50', emoji: '🍜', desc: 'Tonkotsu, chashu pork' },
+        { name: 'Edamame', price: '€4.50', emoji: '🫛', desc: 'Zeezout' },
+        { name: 'Pokébowl', price: '€14.00', emoji: '🥗', desc: 'Zalm, avocado, mango' },
+      ],
+      'Tattoo shop': [
+        { name: 'Klein Tattoo', price: '€80.00', emoji: '🎨', desc: 'Tot 5cm, 30 min' },
+        { name: 'Medium Tattoo', price: '€200.00', emoji: '💉', desc: '5-15cm, 2 uur' },
+        { name: 'Groot Tattoo', price: '€400.00', emoji: '🖼️', desc: '15cm+, halve dag' },
+        { name: 'Cover-up', price: '€250.00', emoji: '🔄', desc: 'Over bestaand tattoo' },
+        { name: 'Piercing', price: '€30.00', emoji: '💎', desc: 'Incl. sieraad' },
+        { name: 'Consult', price: '€0.00', emoji: '📋', desc: 'Gratis, ontwerp bespreken' },
+      ],
+      'Trimsalon': [
+        { name: 'Kleine Hond', price: '€30.00', emoji: '🐶', desc: 'Tot 10 kg, knippen & bad' },
+        { name: 'Grote Hond', price: '€50.00', emoji: '🐕', desc: '10+ kg, volledige trim' },
+        { name: 'Puppypakket', price: '€25.00', emoji: '🐾', desc: 'Eerste trim, gewenning' },
+        { name: 'Ontvilten', price: '€15.00', emoji: '🧹', desc: 'Extra bij klitten' },
+        { name: 'Nagels + Oren', price: '€15.00', emoji: '✂️', desc: 'Verzorging pakket' },
+        { name: 'Tanden Poetsen', price: '€10.00', emoji: '🦷', desc: 'Frisse adem' },
+      ],
+      'Wijnbar': [
+        { name: 'Huiswijn Rood', price: '€5.50', emoji: '🍷', desc: 'Italiaans, vol van smaak' },
+        { name: 'Prosecco', price: '€6.00', emoji: '🥂', desc: 'Bruisend, feestelijk' },
+        { name: 'Wijnproeverij', price: '€25.00', emoji: '🍇', desc: '5 wijnen, uitleg' },
+        { name: 'Kaasplank', price: '€15.00', emoji: '🧀', desc: 'Bij de wijn' },
+        { name: 'Champagne', price: '€12.00', emoji: '🫧', desc: 'Moët, per glas' },
+        { name: 'Fles naar Keuze', price: '€28.00', emoji: '🍾', desc: 'Uit onze selectie' },
+      ],
+      'Autowasstraat': [
+        { name: 'Basis Wasbeurt', price: '€8.00', emoji: '🚗', desc: 'Buiten wassen' },
+        { name: 'Premium Wash', price: '€15.00', emoji: '✨', desc: 'Buiten + velgen + wax' },
+        { name: 'Interieur Clean', price: '€25.00', emoji: '🧹', desc: 'Stofzuigen + dashboard' },
+        { name: 'Full Detail', price: '€75.00', emoji: '💎', desc: 'Totaal pakket in/uit' },
+        { name: 'Wasabonnement', price: '€29.00', emoji: '🔄', desc: 'Onbeperkt per maand' },
+        { name: 'Motor Wassen', price: '€12.00', emoji: '🏍️', desc: 'Motor & scooter' },
+      ],
+      'Yoga/Pilates studio': [
+        { name: 'Hatha Yoga', price: '€14.00', emoji: '🧘', desc: '60 min, alle niveaus' },
+        { name: 'Pilates Mat', price: '€14.00', emoji: '🤸', desc: '55 min, core focus' },
+        { name: 'Vinyasa Flow', price: '€15.00', emoji: '💨', desc: '75 min, dynamisch' },
+        { name: 'Yin Yoga', price: '€14.00', emoji: '🌙', desc: '60 min, diep stretch' },
+        { name: 'Reformer', price: '€20.00', emoji: '🏋️', desc: '50 min, machine' },
+        { name: '10-rittenkaart', price: '€120.00', emoji: '🎫', desc: '3 maanden geldig' },
+      ],
+      'Yoga studio': [
+        { name: 'Hatha Yoga', price: '€14.00', emoji: '🧘', desc: '60 min, alle niveaus' },
+        { name: 'Vinyasa Flow', price: '€15.00', emoji: '💨', desc: '75 min, dynamisch' },
+        { name: 'Yin Yoga', price: '€14.00', emoji: '🌙', desc: '60 min, diep stretch' },
+        { name: 'Power Yoga', price: '€16.00', emoji: '💪', desc: '60 min, intensief' },
+        { name: 'Meditatie', price: '€10.00', emoji: '🧠', desc: '30 min, mindfulness' },
+        { name: 'Maandabonnement', price: '€79.00', emoji: '🎫', desc: 'Onbeperkt yoga' },
+      ],
     };
-    return menus[businessType] || menus['Restaurant'];
+    return menus[businessType] || menus['Café/Restaurant'];
   };
 
   const rewards = [
@@ -287,7 +436,13 @@ const PhonePreview: React.FC<PhonePreviewProps> = ({ data, currentStep, isBuildi
         <div className="absolute bottom-0 left-0 right-0 flex justify-around px-4 py-2 bg-[#0e0e16]/95 backdrop-blur-md border-t border-white/5 z-10">
           {[
             { icon: <Home size={15} />, label: 'Home', screen: 'home' as Screen },
-            { icon: <Search size={15} />, label: businessType === 'Restaurant' || businessType === 'Café' ? 'Menu' : businessType === 'Kapsalon' ? 'Services' : businessType === 'Sportschool' ? 'Classes' : 'Shop', screen: 'menu' as Screen },
+            { icon: <Search size={15} />, label:
+              ['Café/Restaurant', 'Bakkerij', 'IJssalon', 'Sushi takeaway', 'Wijnbar'].includes(businessType) ? 'Menu' :
+              ['Kapsalon', 'Barbershop', 'Nagelstudio', 'Massage salon', 'Tattoo shop', 'Fotostudio', 'Fietsenmaker', 'Autowasstraat'].includes(businessType) ? 'Services' :
+              ['Sportschool/Fitness', 'Yoga/Pilates studio', 'Yoga studio'].includes(businessType) ? 'Classes' :
+              ['Pet grooming', 'Trimsalon'].includes(businessType) ? 'Diensten' :
+              ['Huisartsenpraktijk'].includes(businessType) ? 'Afspraak' :
+              'Shop', screen: 'menu' as Screen },
             { icon: <Heart size={15} />, label: 'Rewards', screen: 'rewards' as Screen },
             { icon: <User size={15} />, label: 'Profile', screen: 'profile' as Screen },
           ].map((item, idx) => (

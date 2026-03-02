@@ -111,6 +111,56 @@ body, [data-theme="dark"] {
 
 [data-theme="light"] select option { background: white; color: #1a1a2e; }
 
+/* ======== DROPDOWN COMPONENT ======== */
+[data-theme="dark"] .dropdown-panel {
+  background: #12121a;
+  border: 1px solid rgba(42, 42, 61, 0.6);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(34, 197, 94, 0.05);
+}
+[data-theme="dark"] .dropdown-search {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: white;
+}
+[data-theme="dark"] .dropdown-search::placeholder { color: rgba(255, 255, 255, 0.25); }
+[data-theme="dark"] .dropdown-search:focus {
+  border-color: rgba(34, 197, 94, 0.4);
+  background: rgba(255, 255, 255, 0.06);
+}
+[data-theme="dark"] .dropdown-border { border-color: rgba(255, 255, 255, 0.06); }
+[data-theme="dark"] .dropdown-category-header { background: #12121a; }
+[data-theme="dark"] .dropdown-option { }
+[data-theme="dark"] .dropdown-option:hover { background: rgba(255, 255, 255, 0.04); }
+[data-theme="dark"] .dropdown-option-selected { background: rgba(34, 197, 94, 0.08) !important; }
+[data-theme="dark"] .dropdown-option-highlighted { background: rgba(34, 197, 94, 0.12) !important; }
+[data-theme="dark"] .dropdown-scroll { scrollbar-color: #2a2a3d #12121a; }
+
+[data-theme="light"] .dropdown-panel {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+[data-theme="light"] .dropdown-search {
+  background: #f8f9fc;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: #1a1a2e;
+}
+[data-theme="light"] .dropdown-search::placeholder { color: #94a3b8; }
+[data-theme="light"] .dropdown-search:focus {
+  border-color: rgba(34, 197, 94, 0.4);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.08);
+}
+[data-theme="light"] .dropdown-border { border-color: rgba(0, 0, 0, 0.06); }
+[data-theme="light"] .dropdown-category-header { background: #ffffff; }
+[data-theme="light"] .dropdown-option:hover { background: rgba(0, 0, 0, 0.03); }
+[data-theme="light"] .dropdown-option-selected { background: rgba(34, 197, 94, 0.06) !important; }
+[data-theme="light"] .dropdown-option-highlighted { background: rgba(34, 197, 94, 0.1) !important; }
+[data-theme="light"] .dropdown-scroll { scrollbar-color: #d1d5db #ffffff; }
+
+/* Also fix native select fallback */
+[data-theme="dark"] select option { background: #14141f; color: white; }
+
 /* ======== ANIMATIONS ======== */
 @keyframes shimmer {
   0% { background-position: -200% 0; }
